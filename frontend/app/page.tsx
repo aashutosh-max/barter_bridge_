@@ -33,7 +33,7 @@ export default function Home() {
   const [profile, setProfile] = useState<any>({});
   const [inv, setInv] = useState({ has: "", wants: "" });
   
-  const [direct, setDirect] = useState([]);
+  const [direct, setDirect] = useState<any[]>([]);
   const [chain, setChain] = useState<any|null>(null);
   
   const [chatUser, setChatUser] = useState<string|null>(null);
@@ -270,7 +270,7 @@ export default function Home() {
           <div className="p-8 max-w-3xl mx-auto w-full">
             <h2 className="text-2xl font-bold mb-6">My Inventory</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-              {['has_items', 'wants_items'].map((type) => (
+            {(['has_items', 'wants_items'] as const).map((type) => (
                 <div key={type} className={cardCls}>
                   <h3 className="text-xl font-bold mb-4 text-green-500">Items I {type === 'has_items' ? 'Have' : 'Want'}</h3>
                   <div className="flex gap-2 mb-4">

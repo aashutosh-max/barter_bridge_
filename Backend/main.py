@@ -34,9 +34,12 @@ def register(user: UserCreate):
 def login(user: UserLogin):
     db = get_db(); c = db.cursor()
     r = c.execute("SELECT * FROM users WHERE username=? AND password=?", (user.username, hp(user.password))).fetchone()
+    if not r:
+        db.close()
+        raise HTTPException(401, "Invalid credentials")
+    users = get_all_users(c) # Must fetch users BEFORE closing the database!
     db.close()
-    if not r: raise HTTPException(401, "Invalid credentials")
-    return {"user": get_all_users(c)[user.username]}
+    return {"user": users[user.username]}
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
