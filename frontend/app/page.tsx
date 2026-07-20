@@ -19,13 +19,13 @@ const CustomNode = ({ data, selected }: any) => {
   );
 };
 
-// NEW: Map Background Node (Glues the map to the graph canvas!)
+// Map Node perfectly sized to the bounding box
 const MapNode = () => (
   <img 
-    src="https://staticmap.openstreetmap.de/staticmap.php?center=28.0,84.5&zoom=7&size=1500x1500&maptype=mapnik" 
-    className="w-[1500px] h-[1500px] pointer-events-none select-none"
-    style={{ filter: 'grayscale(100%) brightness(0.6) contrast(1.2)' }}
-    alt="Map of Nepal"
+    src="https://staticmap.openstreetmap.de/staticmap.php?bbox=83.0,27.5,85.6,28.5&size=1500x1000&maptype=mapnik" 
+    className="w-[1500px] h-[1000px] pointer-events-none select-none"
+    style={{ filter: 'grayscale(100%) invert(90%) contrast(0.9)' }} // Inverts colors to make it dark mode!
+    alt="Map"
   />
 );
 
@@ -77,7 +77,6 @@ export default function Home() {
         
         const newNodes: any[] = [];
         
-        // NEW: Add the map as a background node if in distance mode
         if (layoutMode === 'distance') {
           newNodes.push({
             id: 'map-background',
@@ -96,10 +95,9 @@ export default function Home() {
           let x, y;
           
           if (layoutMode === 'distance') {
-            // Mapped coordinates to perfectly overlay the static map image
-            // Map is 1500x1500, centered at 28.0, 84.5
-            x = (user.lng - 82.0) * 300;
-            y = (29.0 - user.lat) * 500;
+            // PERFECT MATH: Map bbox is Lng 83.0 to 85.6, Lat 27.5 to 28.5. Map size is 1500x1000.
+            x = ((user.lng - 83.0) / 2.6) * 1500;
+            y = ((28.5 - user.lat) / 1.0) * 1000;
           } else {
             const index = Object.keys(data.users).indexOf(id);
             x = 250 + Math.cos(index * 2) * 150;
@@ -404,6 +402,7 @@ export default function Home() {
                   onEdgesChange={onEdgesChange}
                   nodeTypes={nodeTypes}
                   fitView
+                  minZoom={0.1}
                 >
                   {layoutMode !== 'distance' && <Background color="#444" gap={20} />}
                   <Controls />
