@@ -7,7 +7,7 @@ import 'reactflow/dist/style.css';
 const CustomNode = ({ data, selected }: any) => {
   if (selected) {
     return (
-      <div className="bg-gray-800 border-2 border-green-500 rounded-xl p-3 text-center shadow-lg" style={{ width: '150px' }}>
+      <div className="bg-gray-800/90 backdrop-blur-sm border-2 border-green-500 rounded-xl p-3 text-center shadow-lg" style={{ width: '150px' }}>
         <div className="font-bold text-green-500 mb-1">{data.name}</div>
         <div className="text-xs text-gray-400">Has: {data.has}</div>
         <div className="text-xs text-gray-400">Wants: {data.wants}</div>
@@ -25,7 +25,7 @@ export default function Home() {
   const [view, setView] = useState<'landing' | 'auth' | 'app'>('landing');
   const [activeTab, setActiveTab] = useState<'my-trades' | 'available-trades' | 'inventory' | 'chat' | 'profile' | 'settings'>('my-trades');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [layoutMode, setLayoutMode] = useState<'distance' | 'network'>('network'); // NEW: Toggle state
+  const [layoutMode, setLayoutMode] = useState<'distance' | 'network'>('network');
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -65,17 +65,15 @@ export default function Home() {
         const userList = Object.values(data.users);
         setAllUsers(userList);
         
-        // NEW: Map lat/lng to X/Y coordinates for the graph
         const newNodes = Object.keys(data.users).map((id) => {
           const user = data.users[id];
           let x, y;
           
           if (layoutMode === 'distance') {
-            // Map Nepal coords (Lat: 27-28, Lng: 83-87) to screen pixels
-            x = (user.lng - 83.5) * 500;
-            y = (28.5 - user.lat) * 500;
+            // Map Nepal coords (Lat: 27.5-28.1, Lng: 83.5-85.6) to screen pixels (1000x1000 canvas)
+            x = ((user.lng - 83.5) / 2.1) * 1000;
+            y = ((28.1 - user.lat) / 0.6) * 1000;
           } else {
-            // Circular layout based on index
             const index = Object.keys(data.users).indexOf(id);
             x = 250 + Math.cos(index * 2) * 150;
             y = 250 + Math.sin(index * 2) * 150;
@@ -83,7 +81,7 @@ export default function Home() {
           
           return {
             id,
-            type: 'custom', // Use our custom node!
+            type: 'custom',
             position: { x, y },
             data: { name: user.name, has: user.has_items.join(", "), wants: user.wants_items.join(", ") },
           };
@@ -95,7 +93,7 @@ export default function Home() {
           target,
           type: "straight",
           animated: false,
-          style: { stroke: '#374151', cursor: 'pointer' },
+          style: { stroke: layoutMode === 'distance' ? '#10b981' : '#374151', cursor: 'pointer', opacity: 0.6 },
         }));
 
         setNodes(newNodes);
@@ -111,7 +109,6 @@ export default function Home() {
       });
   };
 
-  // Reload graph when layout mode changes
   useEffect(() => {
     loadGraph();
   }, [layoutMode]);
@@ -248,7 +245,7 @@ export default function Home() {
         const next = data.cycle[(i + 1) % data.cycle.length];
         const edge = newEdges.find(e => e.source === u && e.target === next);
         if (edge) {
-          edge.style = { stroke: 'red', strokeWidth: 3, cursor: 'pointer' };
+          edge.style = { stroke: 'red', strokeWidth: 3, cursor: 'pointer', opacity: 1 };
           edge.animated = true;
           edge.label = "TRADE MATCH";
           edge.labelStyle = { fill: 'red', fontWeight: 700, fontSize: 12 };
@@ -364,24 +361,37 @@ export default function Home() {
         
         {activeTab === 'my-trades' && (
           <>
-            <div className="p-4 flex justify-between items-center border-b border-gray-700 bg-gray-800">
+            <div className="p-4 flex justify-between items-center border-b border-gray-700 bg-gray-800 z-10">
               <h2 className="text-xl font-bold">My Trade Network ({layoutMode === 'distance' ? 'Distance View' : 'Network View'})</h2>
               <div className="flex gap-2 items-center">
                 <button onClick={findTrade} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded shadow-sm">Find Multi-Way Trade</button>
               </div>
             </div>
-            <div className="flex-1">
-              <ReactFlow 
-                nodes={nodes} 
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                nodeTypes={nodeTypes}
-              >
-                <Background color="#444" gap={20} />
-                <Controls />
-              </ReactFlow>
+            
+            <div className="flex-1 relative">
+              {/* NEW: Map Background for Distance View */}
+              {layoutMode === 'distance' && (
+                <iframe
+                  title="map-background"
+                  className="absolute inset-0 w-full h-full pointer-events-none opacity-60"
+                  src="https://www.openstreetmap.org/export/embed.html?bbox=83.5%2C27.5%2C85.6%2C28.1&layer=mapnik"
+                />
+              )}
+              
+              <div className="absolute inset-0">
+                <ReactFlow 
+                  nodes={nodes} 
+                  edges={edges}
+                  onNodesChange={onNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  nodeTypes={nodeTypes}
+                >
+                  {layoutMode !== 'distance' && <Background color="#444" gap={20} />}
+                  <Controls />
+                </ReactFlow>
+              </div>
             </div>
+            
             <div className="p-4 text-center font-bold text-lg bg-gray-800">{cycleMessage}</div>
           </>
         )}
@@ -601,7 +611,6 @@ export default function Home() {
           <div className="p-8 max-w-2xl mx-auto w-full">
             <h2 className="text-2xl font-bold mb-6">Settings</h2>
             
-            {/* NEW: Graph Layout Toggle */}
             <div className="p-8 rounded-xl shadow-sm border flex justify-between items-center bg-gray-800 border-gray-700 mb-4">
               <div>
                 <h3 className="text-xl font-semibold">Distance Layout</h3>
