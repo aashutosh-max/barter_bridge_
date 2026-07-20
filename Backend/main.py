@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import time
+import math
 from database import get_db
 from models import UserCreate, UserLogin, UserUpdate, MessageCreate
 
@@ -28,8 +29,9 @@ def register(user: UserCreate):
         raise HTTPException(status_code=400, detail="Username already taken")
     
     default_pic = f"https://api.dicebear.com/7.x/pixel-art/svg?seed={user.username}&backgroundColor=1f2937"
-    c.execute("INSERT INTO users (username, password, has_items, wants_items, profile_pic, phone, email, address, website) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-              (user.username, hash_password(user.password), json.dumps(user.has_items), json.dumps(user.wants_items), default_pic, "", "", "", ""))
+    # Default coords to Kathmandu
+    c.execute("INSERT INTO users (username, password, has_items, wants_items, profile_pic, phone, email, address, website, lat, lng) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+              (user.username, hash_password(user.password), json.dumps(user.has_items), json.dumps(user.wants_items), default_pic, "", "", "", "", 27.7172, 85.3240))
     conn.commit()
     conn.close()
     return {"message": "User registered successfully!", "user": {"name": user.username, "has_items": user.has_items, "wants_items": user.wants_items, "profile_pic": default_pic, "phone": "", "email": "", "address": "", "website": ""}}
@@ -58,7 +60,9 @@ def login(user: UserLogin):
             "phone": db_user["phone"],
             "email": db_user["email"],
             "address": db_user["address"],
-            "website": db_user["website"]
+            "website": db_user["website"],
+            "lat": db_user["lat"],
+            "lng": db_user["lng"]
         }
     }
 
@@ -81,7 +85,7 @@ async def upload_file(file: UploadFile = File(...)):
 def get_graph():
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT username, has_items, wants_items, profile_pic, phone, email, address, website FROM users")
+    c.execute("SELECT username, has_items, wants_items, profile_pic, phone, email, address, website, lat, lng FROM users")
     users_rows = c.fetchall()
     conn.close()
     
@@ -95,7 +99,9 @@ def get_graph():
             "phone": row["phone"],
             "email": row["email"],
             "address": row["address"],
-            "website": row["website"]
+            "website": row["website"],
+            "lat": row["lat"],
+            "lng": row["lng"]
         }
         
     trust_edges = []
@@ -106,7 +112,6 @@ def get_graph():
                 
     return {"users": users, "trust_edges": trust_edges}
 
-# FIXED: Removed broken vouch check
 @app.get("/api/direct-trades/{username}")
 def get_direct_trades(username: str):
     conn = get_db()
@@ -154,17 +159,26 @@ def send_message(msg: MessageCreate):
 def update_profile(user: UserUpdate):
     conn = get_db()
     c = conn.cursor()
-    c.execute("UPDATE users SET has_items = ?, wants_items = ?, profile_pic = ?, phone = ?, email = ?, address = ?, website = ? WHERE username = ?", 
-              (json.dumps(user.has_items), json.dumps(user.wants_items), user.profile_pic, user.phone, user.email, user.address, user.website, user.username))
+    c.execute("UPDATE users SET has_items = ?, wants_items = ?, profile_pic = ?, phone = ?, email = ?, address = ?, website = ?, lat = ?, lng = ? WHERE username = ?", 
+              (json.dumps(user.has_items), json.dumps(user.wants_items), user.profile_pic, user.phone, user.email, user.address, user.website, user.lat, user.lng, user.username))
     conn.commit()
     conn.close()
-    return {"message": "Profile updated!", "user": {"name": user.username, "has_items": user.has_items, "wants_items": user.wants_items, "profile_pic": user.profile_pic, "phone": user.phone, "email": user.email, "address": user.address, "website": user.website}}
+    return {"message": "Profile updated!", "user": {"name": user.username, "has_items": user.has_items, "wants_items": user.wants_items, "profile_pic": user.profile_pic, "phone": user.phone, "email": user.email, "address": user.address, "website": user.website, "lat": user.lat, "lng": user.lng}}
+
+# NEW: Haversine formula to calculate distance between two coordinates
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371.0  # Earth radius in kilometers
+    dLat = math.radians(lat2 - lat1)
+    dLon = math.radians(lon2 - lon1)
+    a = math.sin(dLat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dLon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
 
 @app.get("/api/find-cycle")
 def find_cycle():
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT username, has_items, wants_items FROM users")
+    c.execute("SELECT username, has_items, wants_items, lat, lng FROM users")
     users_rows = c.fetchall()
     conn.close()
     
@@ -173,7 +187,9 @@ def find_cycle():
     for row in users_rows:
         users[row["username"]] = {
             "has_items": json.loads(row["has_items"]), 
-            "wants_items": json.loads(row["wants_items"])
+            "wants_items": json.loads(row["wants_items"]),
+            "lat": row["lat"],
+            "lng": row["lng"]
         }
     
     for u1, data1 in users.items():
@@ -183,5 +199,15 @@ def find_cycle():
                 
     cycles = list(nx.simple_cycles(G))
     if cycles:
-        return {"success": True, "cycle": cycles[0]}
+        # Sort cycles by total geographical distance
+        def get_cycle_distance(cycle):
+            dist = 0
+            for i in range(len(cycle)):
+                u1 = cycle[i]
+                u2 = cycle[(i + 1) % len(cycle)]
+                dist += haversine(users[u1]["lat"], users[u1]["lng"], users[u2]["lat"], users[u2]["lng"])
+            return dist
+        
+        cycles.sort(key=get_cycle_distance)
+        return {"success": True, "cycle": cycles[0]} # Return the shortest distance cycle!
     return {"success": False, "cycle": []}

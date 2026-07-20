@@ -20,6 +20,8 @@ class UserUpdate(BaseModel):
     email: str = ""
     address: str = ""
     website: str = ""
+    lat: float = 27.7172
+    lng: float = 85.3240
 
 class MessageCreate(BaseModel):
     sender: str

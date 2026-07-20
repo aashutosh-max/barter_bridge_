@@ -3,10 +3,29 @@ import React, { useEffect, useState } from 'react';
 import ReactFlow, { Background, Controls, Node, Edge, useNodesState, useEdgesState } from 'reactflow';
 import 'reactflow/dist/style.css';
 
+// Custom Node Component (Circle that expands into a box)
+const CustomNode = ({ data, selected }: any) => {
+  if (selected) {
+    return (
+      <div className="bg-gray-800 border-2 border-green-500 rounded-xl p-3 text-center shadow-lg" style={{ width: '150px' }}>
+        <div className="font-bold text-green-500 mb-1">{data.name}</div>
+        <div className="text-xs text-gray-400">Has: {data.has}</div>
+        <div className="text-xs text-gray-400">Wants: {data.wants}</div>
+      </div>
+    );
+  }
+  return (
+    <div className="w-4 h-4 bg-green-500 rounded-full border-2 border-white shadow-md cursor-pointer hover:bg-green-400"></div>
+  );
+};
+
+const nodeTypes = { custom: CustomNode };
+
 export default function Home() {
   const [view, setView] = useState<'landing' | 'auth' | 'app'>('landing');
   const [activeTab, setActiveTab] = useState<'my-trades' | 'available-trades' | 'inventory' | 'chat' | 'profile' | 'settings'>('my-trades');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<'distance' | 'network'>('network'); // NEW: Toggle state
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -37,7 +56,6 @@ export default function Home() {
   const [chatInput, setChatInput] = useState("");
   const [isUploading, setIsUploading] = useState(false);
 
-  // NEW: Modal State
   const [viewingUser, setViewingUser] = useState<any | null>(null);
 
   const loadGraph = () => {
@@ -47,12 +65,29 @@ export default function Home() {
         const userList = Object.values(data.users);
         setAllUsers(userList);
         
-        const newNodes = Object.keys(data.users).map((id, index) => ({
-          id,
-          data: { label: `${data.users[id].name}\nHas: ${data.users[id].has_items.join(", ")}\nWants: ${data.users[id].wants_items.join(", ")}` },
-          position: { x: 250 + Math.cos(index * 2) * 150, y: 250 + Math.sin(index * 2) * 150 },
-          style: { background: '#1f2937', color: '#ffffff', border: '2px solid #10b981', padding: 10, borderRadius: 10, textAlign: 'center' as const }
-        }));
+        // NEW: Map lat/lng to X/Y coordinates for the graph
+        const newNodes = Object.keys(data.users).map((id) => {
+          const user = data.users[id];
+          let x, y;
+          
+          if (layoutMode === 'distance') {
+            // Map Nepal coords (Lat: 27-28, Lng: 83-87) to screen pixels
+            x = (user.lng - 83.5) * 500;
+            y = (28.5 - user.lat) * 500;
+          } else {
+            // Circular layout based on index
+            const index = Object.keys(data.users).indexOf(id);
+            x = 250 + Math.cos(index * 2) * 150;
+            y = 250 + Math.sin(index * 2) * 150;
+          }
+          
+          return {
+            id,
+            type: 'custom', // Use our custom node!
+            position: { x, y },
+            data: { name: user.name, has: user.has_items.join(", "), wants: user.wants_items.join(", ") },
+          };
+        });
         
         const newEdges = data.trust_edges.map(([source, target]: [string, string]) => ({
           id: `e-${source}-${target}`,
@@ -69,17 +104,17 @@ export default function Home() {
         if (loggedInUser) {
             const me = data.users[loggedInUser];
             if (me) { 
-              setHasItems(me.has_items); 
-              setWantsItems(me.wants_items); 
-              setProfilePic(me.profile_pic); 
-              setPhone(me.phone || "");
-              setEmail(me.email || "");
-              setAddress(me.address || "");
-              setWebsite(me.website || "");
+              setHasItems(me.has_items); setWantsItems(me.wants_items); setProfilePic(me.profile_pic); 
+              setPhone(me.phone || ""); setEmail(me.email || ""); setAddress(me.address || ""); setWebsite(me.website || "");
             }
         }
       });
   };
+
+  // Reload graph when layout mode changes
+  useEffect(() => {
+    loadGraph();
+  }, [layoutMode]);
 
   const loadDirectTrades = () => {
     if (!loggedInUser) return;
@@ -205,7 +240,7 @@ export default function Home() {
     const data = await res.json();
     
     if (data.success) {
-      setCycleMessage(`🎉 Trade Cycle Found!`);
+      setCycleMessage(`🎉 Shortest Distance Trade Cycle Found!`);
       setChainTrades(data.cycle);
       
       const newEdges = [...edges];
@@ -330,7 +365,7 @@ export default function Home() {
         {activeTab === 'my-trades' && (
           <>
             <div className="p-4 flex justify-between items-center border-b border-gray-700 bg-gray-800">
-              <h2 className="text-xl font-bold">My Trade Network (Graph)</h2>
+              <h2 className="text-xl font-bold">My Trade Network ({layoutMode === 'distance' ? 'Distance View' : 'Network View'})</h2>
               <div className="flex gap-2 items-center">
                 <button onClick={findTrade} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded shadow-sm">Find Multi-Way Trade</button>
               </div>
@@ -341,8 +376,9 @@ export default function Home() {
                 edges={edges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
+                nodeTypes={nodeTypes}
               >
-                <Background color="#444" />
+                <Background color="#444" gap={20} />
                 <Controls />
               </ReactFlow>
             </div>
@@ -564,6 +600,18 @@ export default function Home() {
         {activeTab === 'settings' && (
           <div className="p-8 max-w-2xl mx-auto w-full">
             <h2 className="text-2xl font-bold mb-6">Settings</h2>
+            
+            {/* NEW: Graph Layout Toggle */}
+            <div className="p-8 rounded-xl shadow-sm border flex justify-between items-center bg-gray-800 border-gray-700 mb-4">
+              <div>
+                <h3 className="text-xl font-semibold">Distance Layout</h3>
+                <p className="text-gray-400">Group the graph by physical distance instead of network.</p>
+              </div>
+              <button onClick={() => setLayoutMode(layoutMode === 'distance' ? 'network' : 'distance')} className={`w-16 h-8 rounded-full p-1 transition-colors ${layoutMode === 'distance' ? 'bg-green-600' : 'bg-gray-600'}`}>
+                <div className={`w-6 h-6 bg-white rounded-full shadow-md transform transition-transform ${layoutMode === 'distance' ? 'translate-x-8' : ''}`}></div>
+              </button>
+            </div>
+
             <div className="p-8 rounded-xl shadow-sm border flex justify-between items-center bg-gray-800 border-gray-700">
               <div>
                 <h3 className="text-xl font-semibold">Notifications</h3>
@@ -577,7 +625,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* NEW: View User Profile Modal */}
       {viewingUser && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setViewingUser(null)}>
           <div className="bg-gray-800 rounded-xl border border-green-500 p-8 max-w-md w-full relative" onClick={e => e.stopPropagation()}>
