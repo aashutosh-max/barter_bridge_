@@ -29,7 +29,6 @@ def register(user: UserCreate):
         raise HTTPException(status_code=400, detail="Username already taken")
     
     default_pic = f"https://api.dicebear.com/7.x/pixel-art/svg?seed={user.username}&backgroundColor=1f2937"
-    # Default coords to Kathmandu
     c.execute("INSERT INTO users (username, password, has_items, wants_items, profile_pic, phone, email, address, website, lat, lng) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
               (user.username, hash_password(user.password), json.dumps(user.has_items), json.dumps(user.wants_items), default_pic, "", "", "", "", 27.7172, 85.3240))
     conn.commit()
@@ -72,14 +71,13 @@ async def upload_file(file: UploadFile = File(...)):
     if len(contents) > 64 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large (max 64MB)")
     
-    file_extension = file.filename.split(".")[-1]
     unique_filename = f"{int(time.time())}_{file.filename}"
     file_location = f"uploads/{unique_filename}"
     
     with open(file_location, "wb") as f:
         f.write(contents)
         
-    return {"url": f"http://localhost:8000/uploads/{unique_filename}"}
+    return {"url": f"/uploads/{unique_filename}"} # Relative URL works on both localhost and Render!
 
 @app.get("/api/graph")
 def get_graph():
@@ -165,9 +163,8 @@ def update_profile(user: UserUpdate):
     conn.close()
     return {"message": "Profile updated!", "user": {"name": user.username, "has_items": user.has_items, "wants_items": user.wants_items, "profile_pic": user.profile_pic, "phone": user.phone, "email": user.email, "address": user.address, "website": user.website, "lat": user.lat, "lng": user.lng}}
 
-# NEW: Haversine formula to calculate distance between two coordinates
 def haversine(lat1, lon1, lat2, lon2):
-    R = 6371.0  # Earth radius in kilometers
+    R = 6371.0
     dLat = math.radians(lat2 - lat1)
     dLon = math.radians(lon2 - lon1)
     a = math.sin(dLat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dLon / 2)**2
@@ -199,7 +196,6 @@ def find_cycle():
                 
     cycles = list(nx.simple_cycles(G))
     if cycles:
-        # Sort cycles by total geographical distance
         def get_cycle_distance(cycle):
             dist = 0
             for i in range(len(cycle)):
@@ -209,5 +205,5 @@ def find_cycle():
             return dist
         
         cycles.sort(key=get_cycle_distance)
-        return {"success": True, "cycle": cycles[0]} # Return the shortest distance cycle!
+        return {"success": True, "cycle": cycles[0]}
     return {"success": False, "cycle": []}

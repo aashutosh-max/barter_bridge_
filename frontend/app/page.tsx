@@ -256,7 +256,7 @@ export default function Home() {
     alert("Profile & Inventory updated!");
   };
 
-  const findTrade = async () => {
+    const findTrade = async () => {
     setCycleMessage("Searching for multi-way trades...");
     const res = await fetch('https://barter-bridge-api.onrender.com/api/find-cycle');
     const data = await res.json();
@@ -265,18 +265,27 @@ export default function Home() {
       setCycleMessage(`🎉 Shortest Distance Trade Cycle Found!`);
       setChainTrades(data.cycle);
       
-      const newEdges = [...edges];
-      data.cycle.forEach((u: string, i: number) => {
-        const next = data.cycle[(i + 1) % data.cycle.length];
-        const edge = newEdges.find(e => e.source === u && e.target === next);
-        if (edge) {
-          edge.style = { stroke: 'red', strokeWidth: 3, cursor: 'pointer', opacity: 1 };
-          edge.animated = true;
-          edge.label = "TRADE MATCH";
-          edge.labelStyle = { fill: 'red', fontWeight: 700, fontSize: 12 };
+      // FIX: Map over edges to create entirely new objects so React Flow redraws them
+      const updatedEdges = edges.map((e) => {
+        const isInCycle = data.cycle.some((u: string, i: number) => {
+          const next = data.cycle[(i + 1) % data.cycle.length];
+          return e.source === u && e.target === next;
+        });
+
+        if (isInCycle) {
+          return {
+            ...e,
+            style: { ...e.style, stroke: 'red', strokeWidth: 3, opacity: 1 },
+            animated: true,
+            label: "TRADE MATCH",
+            labelStyle: { fill: 'red', fontWeight: 700, fontSize: 12 },
+            zIndex: 1000 // Force the line to render above the map!
+          };
         }
+        return e;
       });
-      setEdges([...newEdges]);
+      
+      setEdges(updatedEdges);
     } else {
       setCycleMessage("No cycles found.");
       setChainTrades(null);
