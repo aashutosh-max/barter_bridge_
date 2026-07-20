@@ -41,7 +41,7 @@ export default function Home() {
   const [viewingUser, setViewingUser] = useState<any | null>(null);
 
   const loadGraph = () => {
-    fetch('http://localhost:8000/api/graph')
+    fetch('https://barter-bridge-api.onrender.com/api/graph')
       .then(res => res.json())
       .then(data => {
         const userList = Object.values(data.users);
@@ -83,7 +83,7 @@ export default function Home() {
 
   const loadDirectTrades = () => {
     if (!loggedInUser) return;
-    fetch(`http://localhost:8000/api/direct-trades/${loggedInUser}`)
+    fetch(`https://barter-bridge-api.onrender.com/api/direct-trades/${loggedInUser}`)
       .then(res => res.json())
       .then(data => setDirectTrades(data));
   };
@@ -91,7 +91,7 @@ export default function Home() {
   useEffect(() => {
     if (activeTab === 'chat' && chatTarget && loggedInUser) {
       const fetchMessages = () => {
-        fetch(`http://localhost:8000/api/messages/${loggedInUser}/${chatTarget}`)
+        fetch(`https://barter-bridge-api.onrender.com/api/messages/${loggedInUser}/${chatTarget}`)
           .then(res => res.json())
           .then(data => setChatMessages(data));
       };
@@ -103,7 +103,7 @@ export default function Home() {
 
   const handleAuth = async () => {
     setErrorMessage("");
-    const url = isLogin ? 'http://localhost:8000/api/login' : 'http://localhost:8000/api/register';
+    const url = isLogin ? 'https://barter-bridge-api.onrender.com/api/login' : 'https://barter-bridge-api.onrender.com/api/register';
     const payload = isLogin ? { username, password } : { username, password, has_items: hasItems, wants_items: wantsItems };
 
     try {
@@ -132,7 +132,7 @@ export default function Home() {
 
   const sendMessage = async () => {
     if (!chatInput.trim() || !chatTarget) return;
-    await fetch('http://localhost:8000/api/send-message', {
+    await fetch('https://barter-bridge-api.onrender.com/api/send-message', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sender: loggedInUser, receiver: chatTarget, text: chatInput, type: "text" })
@@ -154,13 +154,13 @@ export default function Home() {
     formData.append("file", file);
 
     try {
-      const res = await fetch('http://localhost:8000/api/upload', {
+      const res = await fetch('https://barter-bridge-api.onrender.com/api/upload', {
         method: 'POST',
         body: formData
       });
       const data = await res.json();
       if (res.ok) {
-        await fetch('http://localhost:8000/api/send-message', {
+        await fetch('https://barter-bridge-api.onrender.com/api/send-message', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sender: loggedInUser, receiver: chatTarget, text: data.url, type: "image" })
@@ -189,7 +189,7 @@ export default function Home() {
   const removeWantsItem = (item: string) => { setWantsItems(wantsItems.filter(i => i !== item)); };
 
   const handleUpdateProfile = async () => {
-    await fetch('http://localhost:8000/api/profile', {
+    await fetch('https://barter-bridge-api.onrender.com/api/profile', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: loggedInUser, has_items: hasItems, wants_items: wantsItems, profile_pic: profilePic, phone, email, address, website })
@@ -201,7 +201,7 @@ export default function Home() {
 
   const findTrade = async () => {
     setCycleMessage("Searching for multi-way trades...");
-    const res = await fetch('http://localhost:8000/api/find-cycle');
+    const res = await fetch('https://barter-bridge-api.onrender.com/api/find-cycle');
     const data = await res.json();
     
     if (data.success) {
