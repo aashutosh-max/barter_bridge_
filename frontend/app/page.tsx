@@ -19,7 +19,17 @@ const CustomNode = ({ data, selected }: any) => {
   );
 };
 
-const nodeTypes = { custom: CustomNode };
+// NEW: Map Background Node (Glues the map to the graph canvas!)
+const MapNode = () => (
+  <img 
+    src="https://staticmap.openstreetmap.de/staticmap.php?center=28.0,84.5&zoom=7&size=1500x1500&maptype=mapnik" 
+    className="w-[1500px] h-[1500px] pointer-events-none select-none"
+    style={{ filter: 'grayscale(100%) brightness(0.6) contrast(1.2)' }}
+    alt="Map of Nepal"
+  />
+);
+
+const nodeTypes = { custom: CustomNode, mapNode: MapNode };
 
 export default function Home() {
   const [view, setView] = useState<'landing' | 'auth' | 'app'>('landing');
@@ -65,27 +75,43 @@ export default function Home() {
         const userList = Object.values(data.users);
         setAllUsers(userList);
         
-        const newNodes = Object.keys(data.users).map((id) => {
+        const newNodes: any[] = [];
+        
+        // NEW: Add the map as a background node if in distance mode
+        if (layoutMode === 'distance') {
+          newNodes.push({
+            id: 'map-background',
+            type: 'mapNode',
+            position: { x: 0, y: 0 },
+            data: {},
+            draggable: false,
+            selectable: false,
+            connectable: false,
+            zIndex: -1,
+          });
+        }
+        
+        Object.keys(data.users).forEach((id) => {
           const user = data.users[id];
           let x, y;
           
           if (layoutMode === 'distance') {
-            // EXACT MAPPING to the iframe bbox (83.5 to 85.6 Lng, 27.5 to 28.1 Lat)
-            // Map is 3500px wide, 1000px tall to match the 3.5:1 aspect ratio of the bbox
-            x = ((user.lng - 83.5) / 2.1) * 3500;
-            y = ((28.1 - user.lat) / 0.6) * 1000;
+            // Mapped coordinates to perfectly overlay the static map image
+            // Map is 1500x1500, centered at 28.0, 84.5
+            x = (user.lng - 82.0) * 300;
+            y = (29.0 - user.lat) * 500;
           } else {
             const index = Object.keys(data.users).indexOf(id);
             x = 250 + Math.cos(index * 2) * 150;
             y = 250 + Math.sin(index * 2) * 150;
           }
           
-          return {
+          newNodes.push({
             id,
             type: 'custom',
             position: { x, y },
             data: { name: user.name, has: user.has_items.join(", "), wants: user.wants_items.join(", ") },
-          };
+          });
         });
         
         const newEdges = data.trust_edges.map(([source, target]: [string, string]) => ({
@@ -370,16 +396,6 @@ export default function Home() {
             </div>
             
             <div className="flex-1 relative overflow-hidden">
-              {/* NEW: Black & White Map Background perfectly connected to coordinates */}
-              {layoutMode === 'distance' && (
-                <iframe
-                  title="map-background"
-                  className="absolute top-0 left-0 w-[3500px] h-[1000px] pointer-events-none"
-                  style={{ filter: 'grayscale(100%) contrast(1.1) brightness(0.9)', transformOrigin: '0 0' }}
-                  src="https://www.openstreetmap.org/export/embed.html?bbox=83.5%2C27.5%2C85.6%2C28.1&layer=mapnik"
-                />
-              )}
-              
               <div className="absolute inset-0">
                 <ReactFlow 
                   nodes={nodes} 
