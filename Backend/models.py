@@ -1,20 +1,19 @@
 from pydantic import BaseModel
 from typing import List
 
-class UserCreate(BaseModel):
+class UserBase(BaseModel):
     username: str
-    password: str
     has_items: List[str] = []
     wants_items: List[str] = []
+
+class UserCreate(UserBase):
+    password: str
 
 class UserLogin(BaseModel):
     username: str
     password: str
 
-class UserUpdate(BaseModel):
-    username: str
-    has_items: List[str] = []
-    wants_items: List[str] = []
+class UserUpdate(UserBase):
     profile_pic: str = ""
     phone: str = ""
     email: str = ""
