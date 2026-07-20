@@ -7,7 +7,7 @@ import 'reactflow/dist/style.css';
 const CustomNode = ({ data, selected }: any) => {
   if (selected) {
     return (
-      <div className="bg-gray-800/90 backdrop-blur-sm border-2 border-green-500 rounded-xl p-3 text-center shadow-lg" style={{ width: '150px' }}>
+      <div className="bg-gray-800/90 backdrop-blur-sm border-2 border-green-500 rounded-xl p-3 text-center shadow-lg z-10" style={{ width: '150px' }}>
         <div className="font-bold text-green-500 mb-1">{data.name}</div>
         <div className="text-xs text-gray-400">Has: {data.has}</div>
         <div className="text-xs text-gray-400">Wants: {data.wants}</div>
@@ -70,8 +70,9 @@ export default function Home() {
           let x, y;
           
           if (layoutMode === 'distance') {
-            // Map Nepal coords (Lat: 27.5-28.1, Lng: 83.5-85.6) to screen pixels (1000x1000 canvas)
-            x = ((user.lng - 83.5) / 2.1) * 1000;
+            // EXACT MAPPING to the iframe bbox (83.5 to 85.6 Lng, 27.5 to 28.1 Lat)
+            // Map is 3500px wide, 1000px tall to match the 3.5:1 aspect ratio of the bbox
+            x = ((user.lng - 83.5) / 2.1) * 3500;
             y = ((28.1 - user.lat) / 0.6) * 1000;
           } else {
             const index = Object.keys(data.users).indexOf(id);
@@ -368,12 +369,13 @@ export default function Home() {
               </div>
             </div>
             
-            <div className="flex-1 relative">
-              {/* NEW: Map Background for Distance View */}
+            <div className="flex-1 relative overflow-hidden">
+              {/* NEW: Black & White Map Background perfectly connected to coordinates */}
               {layoutMode === 'distance' && (
                 <iframe
                   title="map-background"
-                  className="absolute inset-0 w-full h-full pointer-events-none opacity-60"
+                  className="absolute top-0 left-0 w-[3500px] h-[1000px] pointer-events-none"
+                  style={{ filter: 'grayscale(100%) contrast(1.1) brightness(0.9)', transformOrigin: '0 0' }}
                   src="https://www.openstreetmap.org/export/embed.html?bbox=83.5%2C27.5%2C85.6%2C28.1&layer=mapnik"
                 />
               )}
@@ -385,6 +387,7 @@ export default function Home() {
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
                   nodeTypes={nodeTypes}
+                  fitView
                 >
                   {layoutMode !== 'distance' && <Background color="#444" gap={20} />}
                   <Controls />
