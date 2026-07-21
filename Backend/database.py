@@ -15,8 +15,6 @@ def init_db():
     
     def pic(name): return f"https://api.dicebear.com/7.x/pixel-art/svg?seed={name}&backgroundColor=1f2937"
     def hp(p): return hashlib.sha256(p.encode()).hexdigest()
-    
-    # NEW: SVG Logos for Organizations
     def logo(emoji): return f"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231f2937'/><text x='50' y='50' font-size='50' text-anchor='middle' dominant-baseline='central'>{emoji}</text></svg>"
     
     users = [
@@ -35,7 +33,6 @@ def init_db():
         ("James", "jamespass", ["Web Design"], ["Apples"], "Kakani", "", 27.7990, 85.2480, "Individual", "", pic("James")),
         ("Mia", "miapass", ["Fresh Produce"], ["Paintings"], "Godavari", "", 27.6010, 85.3980, "Individual", "", pic("Mia")),
         ("John", "johnpass", ["Bicycle Repair"], ["Knitting"], "Lubhu", "", 27.6550, 85.3520, "Individual", "", pic("John")),
-        # NEW: Organizations with Logos
         ("HopeNGO", "hopengopass", ["Volunteers", "Food"], ["800 Blankets", "Medical Supplies"], "Kathmandu", "https://hopengo.org", 27.7100, 85.3100, "Organization", "Hope Foundation Nepal", logo("🤝")),
         ("CityHospital", "hospitalpass", ["800 Blankets", "Medical Supplies"], ["Volunteers", "Food"], "Lalitpur", "https://cityhospital.com", 27.6700, 85.3300, "Organization", "City Hospital", logo("🏥"))
     ]

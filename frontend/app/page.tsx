@@ -54,6 +54,11 @@ export default function Home() {
 
   const loadDirect = async () => { if (me.name) setDirect(await api(`/api/direct-trades/${me.name}`)); };
 
+  // FIX: Auto-load direct trades when user logs in
+  useEffect(() => {
+    if (me.name) loadDirect();
+  }, [me.name]);
+
   useEffect(() => {
     if (tab === 'chat' && chatUser && me.name) {
       const getMsgs = async () => setMessages(await api(`/api/messages/${me.name}/${chatUser}`));
@@ -103,15 +108,16 @@ export default function Home() {
   };
 
   const findTrade = async () => {
+    if (!me.name) return;
     setMsg("Searching...");
-    const data = await api('/api/find-cycle');
+    const data = await api(`/api/find-cycle/${me.name}`);
     if (data.success) {
       setMsg(`🎉 Shortest Distance Cycle Found!`); setChain(data.cycle);
       setEdges(edges.map(e => {
         const inCycle = data.cycle.some((u: string, i: number) => e.source === u && e.target === data.cycle[(i + 1) % data.cycle.length]);
         return inCycle ? { ...e, style: { ...e.style, stroke: 'red', strokeWidth: 3, opacity: 1 }, animated: true, label: "TRADE MATCH", labelStyle: { fill: 'red', fontWeight: 700, fontSize: 12 }, zIndex: 1000 } : e;
       }));
-    } else { setMsg("No cycles found."); setChain(null); }
+    } else { setMsg("No cycles found for your inventory."); setChain(null); }
   };
 
   const connectWithAI = async (receiver: string) => {

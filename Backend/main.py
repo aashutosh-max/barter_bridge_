@@ -26,18 +26,11 @@ def register(user: UserCreate):
     db = get_db(); c = db.cursor()
     if c.execute("SELECT 1 FROM users WHERE username=?", (user.username,)).fetchone(): raise HTTPException(400, "Username taken")
     
-    # NEW: Assign logo for Orgs, pixel-art for Individuals
     if user.role == "Organization":
         pic = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231f2937'/><text x='50' y='50' font-size='50' text-anchor='middle' dominant-baseline='central'>🏢</text></svg>"
     else:
         pic = f"https://api.dicebear.com/7.x/pixel-art/svg?seed={user.username}&backgroundColor=1f2937"
         
-    c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (user.username, hp(user.password), json.dumps(user.has_items), json.dumps(user.wants_items), pic, "", "", "", "", 27.7172, 85.3240, user.role, user.org_name))
-    db.commit(); db.close()
-    return {"user": {"name": user.username, "has_items": user.has_items, "wants_items": user.wants_items, "profile_pic": pic, "role": user.role, "org_name": user.org_name}}
-    db = get_db(); c = db.cursor()
-    if c.execute("SELECT 1 FROM users WHERE username=?", (user.username,)).fetchone(): raise HTTPException(400, "Username taken")
-    pic = f"https://api.dicebear.com/7.x/pixel-art/svg?seed={user.username}&backgroundColor=1f2937"
     c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (user.username, hp(user.password), json.dumps(user.has_items), json.dumps(user.wants_items), pic, "", "", "", "", 27.7172, 85.3240, user.role, user.org_name))
     db.commit(); db.close()
     return {"user": {"name": user.username, "has_items": user.has_items, "wants_items": user.wants_items, "profile_pic": pic, "role": user.role, "org_name": user.org_name}}
@@ -96,7 +89,6 @@ def update_profile(user: UserUpdate):
     db.commit(); db.close()
     return {"status": "updated"}
 
-# NEW: AI Assistant Endpoint
 @app.get("/api/ai-draft/{sender}/{receiver}")
 def ai_draft_message(sender: str, receiver: str):
     db = get_db(); c = db.cursor(); users = get_all_users(c); db.close()
@@ -116,20 +108,23 @@ def ai_draft_message(sender: str, receiver: str):
     draft += f"- {r_name} will provide: {', '.join(i_get)}\n\n"
     draft += f"Please use this chat to coordinate logistics, delivery, or schedules to finalize this barter. Thank you!"
 
-    # Send the AI message directly to the chat database!
     db = get_db(); c = db.cursor()
     c.execute("INSERT INTO messages (sender, receiver, text, type) VALUES (?,?,?,?)", ("BarterAI", receiver, draft, "text"))
     db.commit(); db.close()
     return {"status": "Message sent by AI."}
 
-@app.get("/api/find-cycle")
-def find_cycle():
+@app.get("/api/find-cycle/{username}")
+def find_cycle(username: str):
     db = get_db(); c = db.cursor(); users = get_all_users(c); db.close()
     G = nx.DiGraph()
     for u1, d1 in users.items():
         for u2, d2 in users.items():
             if u1 != u2 and set(d1["wants_items"]) & set(d2["has_items"]): G.add_edge(u1, u2)
+    
     cycles = list(nx.simple_cycles(G))
-    if not cycles: return {"success": False, "cycle": []}
-    cycles.sort(key=lambda cy: sum(haversine(users[cy[i]]["lat"], users[cy[i]]["lng"], users[cy[(i+1)%len(cy)]]["lat"], users[cy[(i+1)%len(cy)]]["lng"]) for i in range(len(cy))))
-    return {"success": True, "cycle": cycles[0]}
+    my_cycles = [cy for cy in cycles if username in cy]
+    
+    if not my_cycles: return {"success": False, "cycle": []}
+    
+    my_cycles.sort(key=lambda cy: sum(haversine(users[cy[i]]["lat"], users[cy[i]]["lng"], users[cy[(i+1)%len(cy)]]["lat"], users[cy[(i+1)%len(cy)]]["lng"]) for i in range(len(cy))))
+    return {"success": True, "cycle": my_cycles[0]}
