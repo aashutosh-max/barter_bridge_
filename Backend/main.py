@@ -19,16 +19,16 @@ def haversine(la1, lo1, la2, lo2):
     return R*2*math.atan2(math.sqrt(a), math.sqrt(1-a))
 
 def get_all_users(c):
-    return {r["username"]: {"name": r["username"], "has_items": json.loads(r["has_items"]), "wants_items": json.loads(r["wants_items"]), "profile_pic": r["profile_pic"], "phone": r["phone"], "email": r["email"], "address": r["address"], "website": r["website"], "lat": r["lat"], "lng": r["lng"]} for r in c.execute("SELECT * FROM users").fetchall()}
+    return {r["username"]: {"name": r["username"], "has_items": json.loads(r["has_items"]), "wants_items": json.loads(r["wants_items"]), "profile_pic": r["profile_pic"], "phone": r["phone"], "email": r["email"], "address": r["address"], "website": r["website"], "lat": r["lat"], "lng": r["lng"], "role": r["role"], "org_name": r["org_name"]} for r in c.execute("SELECT * FROM users").fetchall()}
 
 @app.post("/api/register")
 def register(user: UserCreate):
     db = get_db(); c = db.cursor()
     if c.execute("SELECT 1 FROM users WHERE username=?", (user.username,)).fetchone(): raise HTTPException(400, "Username taken")
     pic = f"https://api.dicebear.com/7.x/pixel-art/svg?seed={user.username}&backgroundColor=1f2937"
-    c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?,?,?,?,?)", (user.username, hp(user.password), json.dumps(user.has_items), json.dumps(user.wants_items), pic, "", "", "", "", 27.7172, 85.3240))
+    c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (user.username, hp(user.password), json.dumps(user.has_items), json.dumps(user.wants_items), pic, "", "", "", "", 27.7172, 85.3240, user.role, user.org_name))
     db.commit(); db.close()
-    return {"user": {"name": user.username, "has_items": user.has_items, "wants_items": user.wants_items, "profile_pic": pic}}
+    return {"user": {"name": user.username, "has_items": user.has_items, "wants_items": user.wants_items, "profile_pic": pic, "role": user.role, "org_name": user.org_name}}
 
 @app.post("/api/login")
 def login(user: UserLogin):
@@ -60,7 +60,7 @@ def get_direct_trades(username: str):
     db = get_db(); c = db.cursor(); users = get_all_users(c); db.close()
     me = users.get(username)
     if not me: return []
-    return [{"name": u, "i_give": list(set(me["has_items"]) & set(d["wants_items"])), "i_get": list(set(me["wants_items"]) & set(d["has_items"]))} for u, d in users.items() if u != username and (set(me["has_items"]) & set(d["wants_items"])) and (set(me["wants_items"]) & set(d["has_items"]))]
+    return [{"name": u, "i_give": list(set(me["has_items"]) & set(d["wants_items"])), "i_get": list(set(me["wants_items"]) & set(d["has_items"])), "role": d["role"], "org_name": d["org_name"]} for u, d in users.items() if u != username and (set(me["has_items"]) & set(d["wants_items"])) and (set(me["wants_items"]) & set(d["has_items"]))]
 
 @app.get("/api/messages/{u1}/{u2}")
 def get_messages(u1: str, u2: str):
@@ -79,10 +79,36 @@ def send_message(msg: MessageCreate):
 @app.put("/api/profile")
 def update_profile(user: UserUpdate):
     db = get_db(); c = db.cursor()
-    c.execute("UPDATE users SET has_items=?, wants_items=?, profile_pic=?, phone=?, email=?, address=?, website=?, lat=?, lng=? WHERE username=?",
-              (json.dumps(user.has_items), json.dumps(user.wants_items), user.profile_pic, user.phone, user.email, user.address, user.website, user.lat, user.lng, user.username))
+    c.execute("UPDATE users SET has_items=?, wants_items=?, profile_pic=?, phone=?, email=?, address=?, website=?, lat=?, lng=?, role=?, org_name=? WHERE username=?",
+              (json.dumps(user.has_items), json.dumps(user.wants_items), user.profile_pic, user.phone, user.email, user.address, user.website, user.lat, user.lng, user.role, user.org_name, user.username))
     db.commit(); db.close()
     return {"status": "updated"}
+
+# NEW: AI Assistant Endpoint
+@app.get("/api/ai-draft/{sender}/{receiver}")
+def ai_draft_message(sender: str, receiver: str):
+    db = get_db(); c = db.cursor(); users = get_all_users(c); db.close()
+    s_user = users.get(sender); r_user = users.get(receiver)
+    if not s_user or not r_user: raise HTTPException(404, "User not found")
+
+    s_name = s_user["org_name"] if s_user["role"] == "Organization" else sender
+    r_name = r_user["org_name"] if r_user["role"] == "Organization" else receiver
+
+    i_give = list(set(s_user["has_items"]) & set(r_user["wants_items"]))
+    i_get = list(set(s_user["wants_items"]) & set(r_user["has_items"]))
+
+    draft = f"Hello {r_name}, I am BarterAI, your automated matchmaking assistant. 🤖\n\n"
+    draft += f"My analysis shows a perfect match between {s_name} and {r_name}.\n\n"
+    draft += f"📋 Trade Details:\n"
+    draft += f"- {s_name} will provide: {', '.join(i_give)}\n"
+    draft += f"- {r_name} will provide: {', '.join(i_get)}\n\n"
+    draft += f"Please use this chat to coordinate logistics, delivery, or schedules to finalize this barter. Thank you!"
+
+    # Send the AI message directly to the chat database!
+    db = get_db(); c = db.cursor()
+    c.execute("INSERT INTO messages (sender, receiver, text, type) VALUES (?,?,?,?)", ("BarterAI", receiver, draft, "text"))
+    db.commit(); db.close()
+    return {"status": "Message sent by AI."}
 
 @app.get("/api/find-cycle")
 def find_cycle():

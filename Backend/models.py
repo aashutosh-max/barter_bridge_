@@ -5,6 +5,8 @@ class UserBase(BaseModel):
     username: str
     has_items: List[str] = []
     wants_items: List[str] = []
+    role: str = "Individual"
+    org_name: str = ""
 
 class UserCreate(UserBase):
     password: str

@@ -17,7 +17,7 @@ export default function Home() {
   
   const [me, setMe] = useState<any>({});
   const [isLogin, setIsLogin] = useState(true);
-  const [authForm, setAuthForm] = useState({ username: "", password: "", has: "", wants: "" });
+  const [authForm, setAuthForm] = useState({ username: "", password: "", has: "", wants: "", role: "Individual", org_name: "" });
   const [profile, setProfile] = useState<any>({});
   const [inv, setInv] = useState({ has: "", wants: "" });
   
@@ -38,21 +38,16 @@ export default function Home() {
     
     const n = Object.keys(data.users).map((id, i) => {
       const u = data.users[id];
+      const label = u.role === 'Organization' ? `${u.org_name} (Org)\nHas: ${u.has_items.join(", ")}\nWants: ${u.wants_items.join(", ")}` : `${u.name}\nHas: ${u.has_items.join(", ")}\nWants: ${u.wants_items.join(", ")}`;
+      const border = u.role === 'Organization' ? '#3b82f6' : '#10b981'; // Blue for Orgs, Green for Individuals
       return {
-        id,
-        position: { x: 250 + Math.cos(i * 2) * 150, y: 250 + Math.sin(i * 2) * 150 },
-        data: { label: `${u.name}\nHas: ${u.has_items.join(", ")}\nWants: ${u.wants_items.join(", ")}` },
-        style: { background: '#1f2937', color: '#fff', border: '2px solid #10b981', padding: 10, borderRadius: 10, textAlign: 'center' as const }
+        id, position: { x: 250 + Math.cos(i * 2) * 150, y: 250 + Math.sin(i * 2) * 150 },
+        data: { label }, style: { background: '#1f2937', color: '#fff', border: `2px solid ${border}`, padding: 10, borderRadius: 10, textAlign: 'center' as const }
       };
     });
     setNodes(n);
-    
     setEdges(data.trust_edges.map(([s, t]: any) => ({ id: `e-${s}-${t}`, source: s, target: t, type: "straight", style: { stroke: '#374151', opacity: 0.6 } })));
-    
-    if (me.name) {
-      const myData = data.users[me.name];
-      if (myData) setProfile({ ...profile, ...myData });
-    }
+    if (me.name) { const myData = data.users[me.name]; if (myData) setProfile({ ...profile, ...myData }); }
   };
 
   const loadDirect = async () => { if (me.name) setDirect(await api(`/api/direct-trades/${me.name}`)); };
@@ -68,7 +63,7 @@ export default function Home() {
 
   const auth = async () => {
     const url = isLogin ? '/api/login' : '/api/register';
-    const payload = isLogin ? { username: authForm.username, password: authForm.password } : { username: authForm.username, password: authForm.password, has_items: authForm.has ? [authForm.has] : [], wants_items: authForm.wants ? [authForm.wants] : [] };
+    const payload = isLogin ? { username: authForm.username, password: authForm.password } : { username: authForm.username, password: authForm.password, has_items: authForm.has ? [authForm.has] : [], wants_items: authForm.wants ? [authForm.wants] : [], role: authForm.role, org_name: authForm.org_name };
     try {
       const data = await api(url, { method: 'POST', body: JSON.stringify(payload) });
       if (data.detail) throw new Error(data.detail);
@@ -117,6 +112,13 @@ export default function Home() {
     } else { setMsg("No cycles found."); setChain(null); }
   };
 
+  // NEW: Trigger AI Assistant
+  const connectWithAI = async (receiver: string) => {
+    await api(`/api/ai-draft/${me.name}/${receiver}`);
+    setChatUser(receiver);
+    setTab('chat');
+  };
+
   const inputCls = "w-full p-2 mb-3 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500";
   const btnCls = "w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded shadow-sm";
   const cardCls = "p-6 rounded-xl shadow-sm border bg-gray-800 border-gray-700";
@@ -130,11 +132,11 @@ export default function Home() {
         </nav>
         <header className="text-center py-20 max-w-4xl mx-auto">
           <h2 className="text-5xl font-extrabold mb-6">Trade Without Limits. <br/> <span className="text-green-500">Trust Without Banks.</span></h2>
-          <p className="text-xl mb-10 text-gray-400">In informal economies, cash is scarce but value isn't. Barter Bridge uses graph theory to unlock multi-way trades in your community. No money required.</p>
+          <p className="text-xl mb-10 text-gray-400">In informal economies, cash is scarce but value isn't. Barter Bridge uses graph theory to unlock multi-way trades for individuals and organizations. No money required.</p>
           <button onClick={() => setView('auth')} className="bg-green-600 hover:bg-green-700 px-8 py-4 rounded-lg font-bold text-lg">Get Started</button>
         </header>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto px-6 pb-20">
-          {['Direct & Chain Trades|Find direct swaps or let our algorithm find complex multi-way cycles.', 'Integrated Chat|Found a match? Message them directly in-app to finalize the details.', 'SDG Impact|Driving No Poverty (1), Decent Work (8), and Reduced Inequalities (10).'].map((t, i) => (
+          {['Individuals & Organizations|Whether you are a farmer or an NGO, list what you have and what you need.', 'AI Matchmaker Assistant|Our AI agent links organizations together and drafts the first message.', 'SDG Impact|Driving No Poverty (1), Decent Work (8), and Reduced Inequalities (10).'].map((t, i) => (
             <div key={i} className={cardCls}>
               <h3 className="text-xl font-bold mb-2 text-green-500">{t.split('|')[0]}</h3>
               <p className="text-gray-300">{t.split('|')[1]}</p>
@@ -155,10 +157,20 @@ export default function Home() {
             <button onClick={() => setIsLogin(true)} className={`w-1/2 py-2 rounded-md ${isLogin ? 'bg-gray-800 text-green-500 font-bold' : 'text-gray-500'}`}>Login</button>
             <button onClick={() => setIsLogin(false)} className={`w-1/2 py-2 rounded-md ${!isLogin ? 'bg-gray-800 text-green-500 font-bold' : 'text-gray-500'}`}>Register</button>
           </div>
+          
+          {!isLogin && (
+            <div className="flex gap-2 mb-3">
+              <button onClick={() => setAuthForm({...authForm, role: "Individual"})} className={`flex-1 py-2 rounded-md ${authForm.role === 'Individual' ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-400'}`}>Individual</button>
+              <button onClick={() => setAuthForm({...authForm, role: "Organization"})} className={`flex-1 py-2 rounded-md ${authForm.role === 'Organization' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-400'}`}>Organization</button>
+            </div>
+          )}
+
           <input type="text" placeholder="Username" value={authForm.username} onChange={e => setAuthForm({...authForm, username: e.target.value})} className={inputCls} />
           <input type="password" placeholder="Password" value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} className={inputCls} />
+          
           {!isLogin && (
             <>
+              {authForm.role === 'Organization' && <input type="text" placeholder="Organization Name" value={authForm.org_name} onChange={e => setAuthForm({...authForm, org_name: e.target.value})} className={inputCls} />}
               <input type="text" placeholder="What you HAVE" value={authForm.has} onChange={e => setAuthForm({...authForm, has: e.target.value})} className={inputCls} />
               <input type="text" placeholder="What you WANT" value={authForm.wants} onChange={e => setAuthForm({...authForm, wants: e.target.value})} className={inputCls} />
             </>
@@ -184,8 +196,8 @@ export default function Home() {
             <button onClick={() => setCollapsed(!collapsed)} className="p-2 bg-gray-700 rounded hover:bg-gray-600">{collapsed ? '→' : '←'}</button>
           </div>
           <div className="flex flex-col items-center mb-6">
-            <img src={profile.profile_pic || "https://api.dicebear.com/7.x/pixel-art/svg?seed=U&backgroundColor=1f2937"} alt="Profile" className="w-16 h-16 rounded-full border-2 border-green-500 object-cover mb-2 bg-gray-900" />
-            {!collapsed && <p className="text-sm font-bold text-gray-300">{me.name}</p>}
+            <img src={profile.profile_pic || "https://api.dicebear.com/7.x/pixel-art/svg?seed=U&backgroundColor=1f2937"} alt="Profile" className={`w-16 h-16 rounded-full object-cover mb-2 bg-gray-900 border-2 ${profile.role === 'Organization' ? 'border-blue-500' : 'border-green-500'}`} />
+            {!collapsed && <p className="text-sm font-bold text-gray-300">{profile.role === 'Organization' ? profile.org_name : me.name}</p>}
           </div>
           <ul>
             <SidebarLink id="my-trades" icon="📊" label="My Trades" />
@@ -193,7 +205,6 @@ export default function Home() {
             <SidebarLink id="inventory" icon="📦" label="Inventory" />
             <SidebarLink id="chat" icon="💬" label="Chat" />
             <SidebarLink id="profile" icon="👤" label="Profile" />
-            <SidebarLink id="settings" icon="⚙️" label="Settings" />
           </ul>
         </div>
         <button onClick={() => { setMe({}); setView('landing'); }} className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded font-semibold flex items-center justify-center">
@@ -224,8 +235,8 @@ export default function Home() {
             {direct.length === 0 ? <p className="text-gray-500 italic">No direct trades found.</p> : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
                 {direct.map((t, i) => (
-                  <div key={i} className={cardCls}>
-                    <h3 className="text-xl font-bold text-green-500 mb-4">{t.name}</h3>
+                  <div key={i} className={`${cardCls} ${t.role === 'Organization' ? 'border-blue-500' : ''}`}>
+                    <h3 className={`text-xl font-bold mb-4 ${t.role === 'Organization' ? 'text-blue-500' : 'text-green-500'}`}>{t.role === 'Organization' ? t.org_name : t.name}</h3>
                     <div className="flex justify-between items-center mb-4">
                       <div className="flex-1"><p className="text-xs text-gray-500 uppercase">You Give</p><p className="font-bold text-red-400">{t.i_give.join(", ")}</p></div>
                       <div className="mx-4 text-2xl">⇄</div>
@@ -233,7 +244,11 @@ export default function Home() {
                     </div>
                     <div className="flex gap-2 mt-4">
                       <button onClick={() => setViewUser(users.find(u => u.name === t.name))} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 rounded">View Profile</button>
-                      <button onClick={() => { setChatUser(t.name); setTab('chat'); }} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded">Message</button>
+                      {t.role === 'Organization' ? (
+                        <button onClick={() => connectWithAI(t.name)} className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded">🤖 Connect AI</button>
+                      ) : (
+                        <button onClick={() => { setChatUser(t.name); setTab('chat'); }} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded">Message</button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -263,7 +278,7 @@ export default function Home() {
                 <div key={type} className={cardCls}>
                   <h3 className="text-xl font-bold mb-4 text-green-500">Items I {type === 'has_items' ? 'Have' : 'Want'}</h3>
                   <div className="flex gap-2 mb-4">
-                    <input type="text" value={inv[type === 'has_items' ? 'has' : 'wants']} onChange={e => setInv({...inv, [type === 'has_items' ? 'has' : 'wants']: e.target.value})} className="w-full p-2 rounded bg-gray-700 text-white border border-gray-600" placeholder="e.g., Web Design" />
+                    <input type="text" value={inv[type === 'has_items' ? 'has' : 'wants']} onChange={e => setInv({...inv, [type === 'has_items' ? 'has' : 'wants']: e.target.value})} className="w-full p-2 rounded bg-gray-700 text-white border border-gray-600" placeholder="e.g., 800 Blankets" />
                     <button onClick={() => { if(inv[type === 'has_items' ? 'has' : 'wants']) { setProfile({...profile, [type]: [...profile[type], inv[type === 'has_items' ? 'has' : 'wants']]}); setInv({...inv, [type === 'has_items' ? 'has' : 'wants']: ""}); } }} className="bg-green-600 px-4 rounded">Add</button>
                   </div>
                   <ul>{profile[type]?.map((item: string, i: number) => (
@@ -285,8 +300,8 @@ export default function Home() {
               <h2 className="text-xl font-bold p-4 border-b border-gray-700">Contacts</h2>
               {users.filter(u => u.name !== me.name).map(u => (
                 <div key={u.name} onClick={() => setChatUser(u.name)} className={`p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-800 ${chatUser === u.name ? 'bg-gray-800' : ''}`}>
-                  <img src={u.profile_pic || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${u.name}&backgroundColor=1f2937`} alt="avatar" className="w-10 h-10 rounded-full object-cover bg-gray-900" />
-                  <div><p className="font-bold">{u.name}</p><p className="text-xs text-gray-500">Has: {u.has_items.join(", ")}</p></div>
+                  <img src={u.profile_pic || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${u.name}&backgroundColor=1f2937`} alt="avatar" className={`w-10 h-10 rounded-full object-cover bg-gray-900 border-2 ${u.role === 'Organization' ? 'border-blue-500' : 'border-green-500'}`} />
+                  <div><p className="font-bold">{u.role === 'Organization' ? u.org_name : u.name}</p><p className="text-xs text-gray-500">Has: {u.has_items.join(", ")}</p></div>
                 </div>
               ))}
             </div>
@@ -295,14 +310,15 @@ export default function Home() {
                 <>
                   <div className="p-4 border-b border-gray-700 bg-gray-800 flex items-center gap-3">
                     <img src={users.find(u => u.name === chatUser)?.profile_pic || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${chatUser}&backgroundColor=1f2937`} alt="avatar" className="w-10 h-10 rounded-full object-cover bg-gray-900" />
-                    <h2 className="text-xl font-bold text-green-500 flex-1">Chat with {chatUser}</h2>
+                    <h2 className="text-xl font-bold text-green-500 flex-1">Chat with {users.find(u => u.name === chatUser)?.org_name || chatUser}</h2>
                     <button onClick={() => setViewUser(users.find(u => u.name === chatUser))} className="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded">View Profile</button>
                   </div>
                   <div className="flex-1 overflow-y-auto p-6 space-y-4">
                     {messages.length === 0 && <p className="text-gray-500 text-center mt-10">No messages yet. Say hello!</p>}
                     {messages.map(m => (
                       <div key={m.id} className={`flex ${m.sender === me.name ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-xs p-3 rounded-lg ${m.sender === me.name ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-200'}`}>
+                        <div className={`max-w-xs p-3 rounded-lg ${m.sender === me.name ? 'bg-green-600 text-white' : m.sender === 'BarterAI' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-200'}`}>
+                          {m.sender === 'BarterAI' && <p className="text-xs font-bold mb-1">🤖 BarterAI Assistant</p>}
                           {m.type === 'image' ? <img src={m.text} alt="upload" className="rounded-lg max-w-full object-cover" /> : m.text}
                         </div>
                       </div>
@@ -325,7 +341,7 @@ export default function Home() {
             <h2 className="text-2xl font-bold mb-6">My Profile</h2>
             <div className={cardCls}>
               <div className="flex items-center gap-6 mb-8">
-                <img src={profile.profile_pic || "https://api.dicebear.com/7.x/pixel-art/svg?seed=U&backgroundColor=1f2937"} alt="Profile" className="w-24 h-24 rounded-full border-2 border-green-500 object-cover bg-gray-900" />
+                <img src={profile.profile_pic || "https://api.dicebear.com/7.x/pixel-art/svg?seed=U&backgroundColor=1f2937"} alt="Profile" className={`w-24 h-24 rounded-full object-cover bg-gray-900 border-2 ${profile.role === 'Organization' ? 'border-blue-500' : 'border-green-500'}`} />
                 <div>
                   <label className="block mb-2 font-semibold text-gray-300">Upload Profile Picture</label>
                   <input type="file" accept="image/*" onChange={handleProfilePic} className="text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-green-600 file:text-white hover:file:bg-green-700" />
@@ -344,18 +360,6 @@ export default function Home() {
             </div>
           </div>
         )}
-
-        {tab === 'settings' && (
-          <div className="p-8 max-w-2xl mx-auto w-full">
-            <h2 className="text-2xl font-bold mb-6">Settings</h2>
-            <div className={`${cardCls} flex justify-between items-center mb-4`}>
-              <div><h3 className="text-xl font-semibold">Notifications</h3><p className="text-gray-400">Manage your trade alerts.</p></div>
-              <button className="w-16 h-8 rounded-full p-1 transition-colors bg-gray-600">
-                <div className="w-6 h-6 bg-white rounded-full shadow-md transform translate-x-0"></div>
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {viewUser && (
@@ -363,9 +367,9 @@ export default function Home() {
           <div className="bg-gray-800 rounded-xl border border-green-500 p-8 max-w-md w-full relative" onClick={e => e.stopPropagation()}>
             <button onClick={() => setViewUser(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl">&times;</button>
             <div className="flex flex-col items-center mb-6">
-              <img src={viewUser.profile_pic || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${viewUser.name}&backgroundColor=1f2937`} alt={viewUser.name} className="w-24 h-24 rounded-full border-2 border-green-500 object-cover mb-3 bg-gray-900" />
-              <h2 className="text-2xl font-bold text-green-500">{viewUser.name}</h2>
-              {viewUser.website && <a href={viewUser.website} target="_blank" rel="noreferrer" className="text-sm text-blue-400 hover:underline mt-1">Visit Business Website ↗</a>}
+              <img src={viewUser.profile_pic || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${viewUser.name}&backgroundColor=1f2937`} alt={viewUser.name} className={`w-24 h-24 rounded-full object-cover mb-3 bg-gray-900 border-2 ${viewUser.role === 'Organization' ? 'border-blue-500' : 'border-green-500'}`} />
+              <h2 className={`text-2xl font-bold ${viewUser.role === 'Organization' ? 'text-blue-500' : 'text-green-500'}`}>{viewUser.role === 'Organization' ? viewUser.org_name : viewUser.name}</h2>
+              {viewUser.website && <a href={viewUser.website} target="_blank" rel="noreferrer" className="text-sm text-blue-400 hover:underline mt-1">Visit Website ↗</a>}
             </div>
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="bg-gray-700 p-3 rounded"><h4 className="text-xs uppercase text-gray-400 mb-1">Items They Have</h4><p className="text-sm font-bold">{viewUser.has_items.join(", ")}</p></div>
