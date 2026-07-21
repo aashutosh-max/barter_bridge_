@@ -25,6 +25,18 @@ def get_all_users(c):
 def register(user: UserCreate):
     db = get_db(); c = db.cursor()
     if c.execute("SELECT 1 FROM users WHERE username=?", (user.username,)).fetchone(): raise HTTPException(400, "Username taken")
+    
+    # NEW: Assign logo for Orgs, pixel-art for Individuals
+    if user.role == "Organization":
+        pic = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%231f2937'/><text x='50' y='50' font-size='50' text-anchor='middle' dominant-baseline='central'>🏢</text></svg>"
+    else:
+        pic = f"https://api.dicebear.com/7.x/pixel-art/svg?seed={user.username}&backgroundColor=1f2937"
+        
+    c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (user.username, hp(user.password), json.dumps(user.has_items), json.dumps(user.wants_items), pic, "", "", "", "", 27.7172, 85.3240, user.role, user.org_name))
+    db.commit(); db.close()
+    return {"user": {"name": user.username, "has_items": user.has_items, "wants_items": user.wants_items, "profile_pic": pic, "role": user.role, "org_name": user.org_name}}
+    db = get_db(); c = db.cursor()
+    if c.execute("SELECT 1 FROM users WHERE username=?", (user.username,)).fetchone(): raise HTTPException(400, "Username taken")
     pic = f"https://api.dicebear.com/7.x/pixel-art/svg?seed={user.username}&backgroundColor=1f2937"
     c.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (user.username, hp(user.password), json.dumps(user.has_items), json.dumps(user.wants_items), pic, "", "", "", "", 27.7172, 85.3240, user.role, user.org_name))
     db.commit(); db.close()
