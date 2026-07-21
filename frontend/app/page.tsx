@@ -30,6 +30,8 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const [viewUser, setViewUser] = useState<any|null>(null);
 
+  const [searchQuery, setSearchQuery] = useState("");
+
   const api = (p: string, opts: any = {}) => fetch(`${API}${p}`, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers||{}) } }).then(r => r.json());
 
   const loadGraph = async () => {
@@ -39,7 +41,7 @@ export default function Home() {
     const n = Object.keys(data.users).map((id, i) => {
       const u = data.users[id];
       const label = u.role === 'Organization' ? `${u.org_name} (Org)\nHas: ${u.has_items.join(", ")}\nWants: ${u.wants_items.join(", ")}` : `${u.name}\nHas: ${u.has_items.join(", ")}\nWants: ${u.wants_items.join(", ")}`;
-      const border = u.role === 'Organization' ? '#3b82f6' : '#10b981'; // Blue for Orgs, Green for Individuals
+      const border = u.role === 'Organization' ? '#3b82f6' : '#10b981'; 
       return {
         id, position: { x: 250 + Math.cos(i * 2) * 150, y: 250 + Math.sin(i * 2) * 150 },
         data: { label }, style: { background: '#1f2937', color: '#fff', border: `2px solid ${border}`, padding: 10, borderRadius: 10, textAlign: 'center' as const }
@@ -112,7 +114,6 @@ export default function Home() {
     } else { setMsg("No cycles found."); setChain(null); }
   };
 
-  // NEW: Trigger AI Assistant
   const connectWithAI = async (receiver: string) => {
     await api(`/api/ai-draft/${me.name}/${receiver}`);
     setChatUser(receiver);
@@ -187,6 +188,30 @@ export default function Home() {
     </li>
   );
 
+  const myHas = profile.has_items || [];
+  const myWants = profile.wants_items || [];
+  const chatContacts = users.filter(u => {
+    if (u.name === me.name) return false;
+    const overlapGive = myHas.filter((x: string) => u.wants_items?.includes(x)).length > 0;
+    const overlapGet = myWants.filter((x: string) => u.has_items?.includes(x)).length > 0;
+    const isChain = chain ? chain.includes(u.name) : false;
+    return (overlapGive && overlapGet) || isChain;
+  });
+
+  const searchResults = searchQuery 
+    ? users.filter(u => 
+        u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        (u.org_name && u.org_name.toLowerCase().includes(searchQuery.toLowerCase()))
+      ) 
+    : [];
+
+  const renderAvatar = (u: any, size = "w-10 h-10") => (
+    <div className="relative">
+      <img src={u.profile_pic || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${u.name}&backgroundColor=1f2937`} alt="avatar" className={`${size} rounded-full object-cover bg-gray-900 border-2 ${u.role === 'Organization' ? 'border-blue-500' : 'border-green-500'}`} />
+      {u.role === 'Organization' && <span className="absolute -bottom-1 -right-1 text-xs bg-gray-900 rounded-full p-0.5">🏢</span>}
+    </div>
+  );
+
   return (
     <div className="flex h-screen bg-gray-900 text-white">
       <div className={`${collapsed ? 'w-20' : 'w-64'} bg-gray-800 p-4 flex flex-col justify-between border-r border-gray-700 transition-all`}>
@@ -196,8 +221,8 @@ export default function Home() {
             <button onClick={() => setCollapsed(!collapsed)} className="p-2 bg-gray-700 rounded hover:bg-gray-600">{collapsed ? '→' : '←'}</button>
           </div>
           <div className="flex flex-col items-center mb-6">
-            <img src={profile.profile_pic || "https://api.dicebear.com/7.x/pixel-art/svg?seed=U&backgroundColor=1f2937"} alt="Profile" className={`w-16 h-16 rounded-full object-cover mb-2 bg-gray-900 border-2 ${profile.role === 'Organization' ? 'border-blue-500' : 'border-green-500'}`} />
-            {!collapsed && <p className="text-sm font-bold text-gray-300">{profile.role === 'Organization' ? profile.org_name : me.name}</p>}
+            {renderAvatar(profile, "w-16 h-16")}
+            {!collapsed && <p className="text-sm font-bold text-gray-300 mt-2">{profile.role === 'Organization' ? profile.org_name : me.name}</p>}
           </div>
           <ul>
             <SidebarLink id="my-trades" icon="📊" label="My Trades" />
@@ -236,7 +261,10 @@ export default function Home() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
                 {direct.map((t, i) => (
                   <div key={i} className={`${cardCls} ${t.role === 'Organization' ? 'border-blue-500' : ''}`}>
-                    <h3 className={`text-xl font-bold mb-4 ${t.role === 'Organization' ? 'text-blue-500' : 'text-green-500'}`}>{t.role === 'Organization' ? t.org_name : t.name}</h3>
+                    <div className="flex items-center gap-3 mb-4">
+                      {renderAvatar(t)}
+                      <h3 className={`text-xl font-bold ${t.role === 'Organization' ? 'text-blue-500' : 'text-green-500'}`}>{t.role === 'Organization' ? t.org_name : t.name}</h3>
+                    </div>
                     <div className="flex justify-between items-center mb-4">
                       <div className="flex-1"><p className="text-xs text-gray-500 uppercase">You Give</p><p className="font-bold text-red-400">{t.i_give.join(", ")}</p></div>
                       <div className="mx-4 text-2xl">⇄</div>
@@ -296,20 +324,49 @@ export default function Home() {
 
         {tab === 'chat' && (
           <div className="flex h-full">
-            <div className="w-1/3 border-r border-gray-700 overflow-auto">
-              <h2 className="text-xl font-bold p-4 border-b border-gray-700">Contacts</h2>
-              {users.filter(u => u.name !== me.name).map(u => (
-                <div key={u.name} onClick={() => setChatUser(u.name)} className={`p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-800 ${chatUser === u.name ? 'bg-gray-800' : ''}`}>
-                  <img src={u.profile_pic || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${u.name}&backgroundColor=1f2937`} alt="avatar" className={`w-10 h-10 rounded-full object-cover bg-gray-900 border-2 ${u.role === 'Organization' ? 'border-blue-500' : 'border-green-500'}`} />
-                  <div><p className="font-bold">{u.role === 'Organization' ? u.org_name : u.name}</p><p className="text-xs text-gray-500">Has: {u.has_items.join(", ")}</p></div>
-                </div>
-              ))}
+            <div className="w-1/3 border-r border-gray-700 overflow-auto flex flex-col">
+              <div className="p-4 border-b border-gray-700 sticky top-0 bg-gray-800 z-10">
+                <input 
+                  type="text" 
+                  placeholder="🔍 Search users or orgs..." 
+                  value={searchQuery} 
+                  onChange={e => setSearchQuery(e.target.value)} 
+                  className="w-full p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500" 
+                />
+              </div>
+              
+              <div className="flex-1 overflow-y-auto">
+                {!searchQuery && (
+                  <h3 className="text-xs uppercase text-gray-500 px-4 pt-4 pb-2 tracking-wider">Trade Matches</h3>
+                )}
+                {searchQuery && (
+                  <h3 className="text-xs uppercase text-gray-500 px-4 pt-4 pb-2 tracking-wider">Search Results</h3>
+                )}
+
+                {(searchQuery ? searchResults : chatContacts).map(u => (
+                  <div key={u.name} onClick={() => { setChatUser(u.name); setSearchQuery(""); }} className={`p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-800 ${chatUser === u.name ? 'bg-gray-800' : ''}`}>
+                    {renderAvatar(u)}
+                    <div>
+                      <p className="font-bold">{u.role === 'Organization' ? u.org_name : u.name} {u.role === 'Organization' && <span className="text-blue-400 text-xs">(Org)</span>}</p>
+                      <p className="text-xs text-gray-500">Has: {u.has_items.join(", ")}</p>
+                    </div>
+                  </div>
+                ))}
+                
+                {!searchQuery && chatContacts.length === 0 && (
+                  <p className="text-gray-500 text-sm text-center mt-10 px-4">No direct or chain matches yet. Use the search bar to find anyone!</p>
+                )}
+                {searchQuery && searchResults.length === 0 && (
+                  <p className="text-gray-500 text-sm text-center mt-10 px-4">No users found matching "{searchQuery}".</p>
+                )}
+              </div>
             </div>
+
             <div className="flex-1 flex flex-col">
               {chatUser ? (
                 <>
                   <div className="p-4 border-b border-gray-700 bg-gray-800 flex items-center gap-3">
-                    <img src={users.find(u => u.name === chatUser)?.profile_pic || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${chatUser}&backgroundColor=1f2937`} alt="avatar" className="w-10 h-10 rounded-full object-cover bg-gray-900" />
+                    {renderAvatar(users.find(u => u.name === chatUser))}
                     <h2 className="text-xl font-bold text-green-500 flex-1">Chat with {users.find(u => u.name === chatUser)?.org_name || chatUser}</h2>
                     <button onClick={() => setViewUser(users.find(u => u.name === chatUser))} className="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded">View Profile</button>
                   </div>
@@ -341,7 +398,7 @@ export default function Home() {
             <h2 className="text-2xl font-bold mb-6">My Profile</h2>
             <div className={cardCls}>
               <div className="flex items-center gap-6 mb-8">
-                <img src={profile.profile_pic || "https://api.dicebear.com/7.x/pixel-art/svg?seed=U&backgroundColor=1f2937"} alt="Profile" className={`w-24 h-24 rounded-full object-cover bg-gray-900 border-2 ${profile.role === 'Organization' ? 'border-blue-500' : 'border-green-500'}`} />
+                {renderAvatar(profile, "w-24 h-24")}
                 <div>
                   <label className="block mb-2 font-semibold text-gray-300">Upload Profile Picture</label>
                   <input type="file" accept="image/*" onChange={handleProfilePic} className="text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-green-600 file:text-white hover:file:bg-green-700" />
@@ -367,8 +424,8 @@ export default function Home() {
           <div className="bg-gray-800 rounded-xl border border-green-500 p-8 max-w-md w-full relative" onClick={e => e.stopPropagation()}>
             <button onClick={() => setViewUser(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl">&times;</button>
             <div className="flex flex-col items-center mb-6">
-              <img src={viewUser.profile_pic || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${viewUser.name}&backgroundColor=1f2937`} alt={viewUser.name} className={`w-24 h-24 rounded-full object-cover mb-3 bg-gray-900 border-2 ${viewUser.role === 'Organization' ? 'border-blue-500' : 'border-green-500'}`} />
-              <h2 className={`text-2xl font-bold ${viewUser.role === 'Organization' ? 'text-blue-500' : 'text-green-500'}`}>{viewUser.role === 'Organization' ? viewUser.org_name : viewUser.name}</h2>
+              {renderAvatar(viewUser, "w-24 h-24")}
+              <h2 className={`text-2xl font-bold mt-3 ${viewUser.role === 'Organization' ? 'text-blue-500' : 'text-green-500'}`}>{viewUser.role === 'Organization' ? viewUser.org_name : viewUser.name}</h2>
               {viewUser.website && <a href={viewUser.website} target="_blank" rel="noreferrer" className="text-sm text-blue-400 hover:underline mt-1">Visit Website ↗</a>}
             </div>
             <div className="grid grid-cols-2 gap-4 mb-6">
