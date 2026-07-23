@@ -46,7 +46,6 @@ def login(user: UserLogin):
     db.close()
     return {"user": users[user.username]}
 
-# NEW: Delete Account Endpoint
 @app.delete("/api/delete-user/{username}")
 def delete_user(username: str):
     db = get_db(); c = db.cursor()
@@ -75,6 +74,17 @@ def get_direct_trades(username: str):
     me = users.get(username)
     if not me: return []
     return [{"name": u, "i_give": list(set(me["has_items"]) & set(d["wants_items"])), "i_get": list(set(me["wants_items"]) & set(d["has_items"])), "role": d["role"], "org_name": d["org_name"]} for u, d in users.items() if u != username and (set(me["has_items"]) & set(d["wants_items"])) and (set(me["wants_items"]) & set(d["has_items"]))]
+
+# NEW: Get list of users you have chatted with
+@app.get("/api/chat-contacts/{username}")
+def get_chat_contacts(username: str):
+    db = get_db(); c = db.cursor()
+    c.execute("SELECT DISTINCT sender FROM messages WHERE receiver=?", (username,))
+    senders = [r["sender"] for r in c.fetchall()]
+    c.execute("SELECT DISTINCT receiver FROM messages WHERE sender=?", (username,))
+    receivers = [r["receiver"] for r in c.fetchall()]
+    db.close()
+    return list(set(senders + receivers))
 
 @app.get("/api/messages/{u1}/{u2}")
 def get_messages(u1: str, u2: str):

@@ -31,12 +31,13 @@ export default function Home() {
   const [viewUser, setViewUser] = useState<any|null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
-  
-  // NEW: Settings States
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const prevMsgCount = useRef(0);
+
+  // NEW: State for recent chats
+  const [chatHistory, setChatHistory] = useState<string[]>([]);
 
   const api = (p: string, opts: any = {}) => fetch(`${API}${p}`, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers||{}) } }).then(r => r.json());
 
@@ -59,26 +60,31 @@ export default function Home() {
   };
 
   const loadDirect = async () => { if (me.name) setDirect(await api(`/api/direct-trades/${me.name}`)); };
+  const loadChatHistory = async () => { if (me.name) setChatHistory(await api(`/api/chat-contacts/${me.name}`)); };
 
   useEffect(() => {
-    if (me.name) loadDirect();
+    if (me.name) {
+      loadDirect();
+      loadChatHistory();
+    }
   }, [me.name]);
 
   useEffect(() => {
     if (tab === 'chat' && chatUser && me.name) {
-      prevMsgCount.current = 0; // Reset message count when switching chats
+      let isInitialLoad = true;
       const getMsgs = async () => {
         const newMsgs = await api(`/api/messages/${me.name}/${chatUser}`);
         
-        // NEW: Toast Notification Logic
-        if (notificationsEnabled && newMsgs.length > prevMsgCount.current) {
+        // FIX: Only show toast if it's NOT the initial load and there's a new message
+        if (!isInitialLoad && notificationsEnabled && newMsgs.length > prevMsgCount.current) {
           const latestMsg = newMsgs[newMsgs.length - 1];
           if (latestMsg.sender !== me.name) {
             setToast(`💬 New message from ${latestMsg.sender === 'BarterAI' ? 'BarterAI' : latestMsg.sender}`);
-            setTimeout(() => setToast(null), 3000); // Hide after 3 seconds
+            setTimeout(() => setToast(null), 3000);
           }
         }
         prevMsgCount.current = newMsgs.length;
+        isInitialLoad = false;
         setMessages(newMsgs);
       };
       getMsgs();
@@ -101,6 +107,7 @@ export default function Home() {
     if (!chatInput.trim() || !chatUser) return;
     await api('/api/send-message', { method: 'POST', body: JSON.stringify({ sender: me.name, receiver: chatUser, text: chatInput, type: "text" }) });
     setChatInput("");
+    loadChatHistory(); // FIX: Update history immediately
   };
 
   const handleChatUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,9 +150,9 @@ export default function Home() {
     await api(`/api/ai-draft/${me.name}/${receiver}`);
     setChatUser(receiver);
     setTab('chat');
+    loadChatHistory(); // FIX: Update history immediately
   };
 
-  // NEW: Delete Account Function
   const deleteAccount = async () => {
     await api(`/api/delete-user/${me.name}`, { method: 'DELETE' });
     setMe({}); setView('landing'); setShowDeleteConfirm(false);
@@ -221,7 +228,7 @@ export default function Home() {
 
   const myHas = profile.has_items || [];
   const myWants = profile.wants_items || [];
-  const chatContacts = users.filter(u => {
+  const tradeMatches = users.filter(u => {
     if (u.name === me.name) return false;
     const overlapGive = myHas.filter((x: string) => u.wants_items?.includes(x)).length > 0;
     const overlapGet = myWants.filter((x: string) => u.has_items?.includes(x)).length > 0;
@@ -368,28 +375,60 @@ export default function Home() {
               </div>
               
               <div className="flex-1 overflow-y-auto">
-                {!searchQuery && (
-                  <h3 className="text-xs uppercase text-gray-500 px-4 pt-4 pb-2 tracking-wider">Trade Matches</h3>
-                )}
-                {searchQuery && (
-                  <h3 className="text-xs uppercase text-gray-500 px-4 pt-4 pb-2 tracking-wider">Search Results</h3>
-                )}
+                {!searchQuery ? (
+                  <>
+                    {/* NEW: Recent Chats Section */}
+                    {chatHistory.length > 0 && (
+                      <>
+                        <h3 className="text-xs uppercase text-gray-500 px-4 pt-4 pb-2 tracking-wider">Recent Chats</h3>
+                        {chatHistory.map(name => {
+                          const u = users.find(x => x.name === name);
+                          if (!u) return null;
+                          return (
+                            <div key={u.name} onClick={() => setChatUser(u.name)} className={`p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-800 ${chatUser === u.name ? 'bg-gray-800' : ''}`}>
+                              {renderAvatar(u)}
+                              <div>
+                                <p className="font-bold">{u.role === 'Organization' ? u.org_name : u.name} {u.role === 'Organization' && <span className="text-blue-400 text-xs">(Org)</span>}</p>
+                                <p className="text-xs text-gray-500">Has: {u.has_items.join(", ")}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </>
+                    )}
 
-                {(searchQuery ? searchResults : chatContacts).map(u => (
-                  <div key={u.name} onClick={() => { setChatUser(u.name); setSearchQuery(""); }} className={`p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-800 ${chatUser === u.name ? 'bg-gray-800' : ''}`}>
-                    {renderAvatar(u)}
-                    <div>
-                      <p className="font-bold">{u.role === 'Organization' ? u.org_name : u.name} {u.role === 'Organization' && <span className="text-blue-400 text-xs">(Org)</span>}</p>
-                      <p className="text-xs text-gray-500">Has: {u.has_items.join(", ")}</p>
-                    </div>
-                  </div>
-                ))}
-                
-                {!searchQuery && chatContacts.length === 0 && (
-                  <p className="text-gray-500 text-sm text-center mt-10 px-4">No direct or chain matches yet. Use the search bar to find anyone!</p>
-                )}
-                {searchQuery && searchResults.length === 0 && (
-                  <p className="text-gray-500 text-sm text-center mt-10 px-4">No users found matching "{searchQuery}".</p>
+                    {/* Trade Matches Section */}
+                    <h3 className="text-xs uppercase text-gray-500 px-4 pt-4 pb-2 tracking-wider">Trade Matches</h3>
+                    {tradeMatches.filter(u => !chatHistory.includes(u.name)).map(u => (
+                      <div key={u.name} onClick={() => setChatUser(u.name)} className={`p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-800 ${chatUser === u.name ? 'bg-gray-800' : ''}`}>
+                        {renderAvatar(u)}
+                        <div>
+                          <p className="font-bold">{u.role === 'Organization' ? u.org_name : u.name} {u.role === 'Organization' && <span className="text-blue-400 text-xs">(Org)</span>}</p>
+                          <p className="text-xs text-gray-500">Has: {u.has_items.join(", ")}</p>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {tradeMatches.length === 0 && chatHistory.length === 0 && (
+                      <p className="text-gray-500 text-sm text-center mt-10 px-4">No matches yet. Use the search bar to find anyone!</p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-xs uppercase text-gray-500 px-4 pt-4 pb-2 tracking-wider">Search Results</h3>
+                    {searchResults.map(u => (
+                      <div key={u.name} onClick={() => { setChatUser(u.name); setSearchQuery(""); }} className={`p-4 flex items-center gap-3 cursor-pointer hover:bg-gray-800 ${chatUser === u.name ? 'bg-gray-800' : ''}`}>
+                        {renderAvatar(u)}
+                        <div>
+                          <p className="font-bold">{u.role === 'Organization' ? u.org_name : u.name} {u.role === 'Organization' && <span className="text-blue-400 text-xs">(Org)</span>}</p>
+                          <p className="text-xs text-gray-500">Has: {u.has_items.join(", ")}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {searchResults.length === 0 && (
+                      <p className="text-gray-500 text-sm text-center mt-10 px-4">No users found matching "{searchQuery}".</p>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -450,7 +489,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* NEW: Updated Settings Menu */}
         {tab === 'settings' && (
           <div className="p-8 max-w-2xl mx-auto w-full">
             <h2 className="text-2xl font-bold mb-6">Settings</h2>
@@ -474,7 +512,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* NEW: Delete Account Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-xl border border-red-500 p-8 max-w-md w-full text-center">
@@ -488,7 +525,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* NEW: View User Profile Modal */}
       {viewUser && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setViewUser(null)}>
           <div className="bg-gray-800 rounded-xl border border-green-500 p-8 max-w-md w-full relative" onClick={e => e.stopPropagation()}>
@@ -512,7 +548,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* NEW: Toast Notification */}
       {toast && (
         <div className="fixed bottom-10 right-10 bg-gray-800 border border-green-500 text-white px-6 py-4 rounded-xl shadow-lg z-[100] flex items-center gap-3">
           {toast}
