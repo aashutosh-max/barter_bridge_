@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import ReactFlow, { Background, Controls, useNodesState, useEdgesState } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -31,6 +31,12 @@ export default function Home() {
   const [viewUser, setViewUser] = useState<any|null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // NEW: Settings States
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const prevMsgCount = useRef(0);
 
   const api = (p: string, opts: any = {}) => fetch(`${API}${p}`, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers||{}) } }).then(r => r.json());
 
@@ -54,19 +60,32 @@ export default function Home() {
 
   const loadDirect = async () => { if (me.name) setDirect(await api(`/api/direct-trades/${me.name}`)); };
 
-  // FIX: Auto-load direct trades when user logs in
   useEffect(() => {
     if (me.name) loadDirect();
   }, [me.name]);
 
   useEffect(() => {
     if (tab === 'chat' && chatUser && me.name) {
-      const getMsgs = async () => setMessages(await api(`/api/messages/${me.name}/${chatUser}`));
+      prevMsgCount.current = 0; // Reset message count when switching chats
+      const getMsgs = async () => {
+        const newMsgs = await api(`/api/messages/${me.name}/${chatUser}`);
+        
+        // NEW: Toast Notification Logic
+        if (notificationsEnabled && newMsgs.length > prevMsgCount.current) {
+          const latestMsg = newMsgs[newMsgs.length - 1];
+          if (latestMsg.sender !== me.name) {
+            setToast(`💬 New message from ${latestMsg.sender === 'BarterAI' ? 'BarterAI' : latestMsg.sender}`);
+            setTimeout(() => setToast(null), 3000); // Hide after 3 seconds
+          }
+        }
+        prevMsgCount.current = newMsgs.length;
+        setMessages(newMsgs);
+      };
       getMsgs();
       const id = setInterval(getMsgs, 1500);
       return () => clearInterval(id);
     }
-  }, [tab, chatUser, me.name]);
+  }, [tab, chatUser, me.name, notificationsEnabled]);
 
   const auth = async () => {
     const url = isLogin ? '/api/login' : '/api/register';
@@ -124,6 +143,12 @@ export default function Home() {
     await api(`/api/ai-draft/${me.name}/${receiver}`);
     setChatUser(receiver);
     setTab('chat');
+  };
+
+  // NEW: Delete Account Function
+  const deleteAccount = async () => {
+    await api(`/api/delete-user/${me.name}`, { method: 'DELETE' });
+    setMe({}); setView('landing'); setShowDeleteConfirm(false);
   };
 
   const inputCls = "w-full p-2 mb-3 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500";
@@ -236,6 +261,7 @@ export default function Home() {
             <SidebarLink id="inventory" icon="📦" label="Inventory" />
             <SidebarLink id="chat" icon="💬" label="Chat" />
             <SidebarLink id="profile" icon="👤" label="Profile" />
+            <SidebarLink id="settings" icon="⚙️" label="Settings" />
           </ul>
         </div>
         <button onClick={() => { setMe({}); setView('landing'); }} className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded font-semibold flex items-center justify-center">
@@ -423,8 +449,46 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        {/* NEW: Updated Settings Menu */}
+        {tab === 'settings' && (
+          <div className="p-8 max-w-2xl mx-auto w-full">
+            <h2 className="text-2xl font-bold mb-6">Settings</h2>
+            
+            <div className={`${cardCls} flex justify-between items-center mb-4`}>
+              <div>
+                <h3 className="text-xl font-semibold">Notifications</h3>
+                <p className="text-gray-400">Show a pop-up when you receive a new message.</p>
+              </div>
+              <button onClick={() => setNotificationsEnabled(!notificationsEnabled)} className={`w-16 h-8 rounded-full p-1 transition-colors ${notificationsEnabled ? 'bg-green-600' : 'bg-gray-600'}`}>
+                <div className={`w-6 h-6 bg-white rounded-full shadow-md transform transition-transform ${notificationsEnabled ? 'translate-x-8' : ''}`}></div>
+              </button>
+            </div>
+
+            <div className={`${cardCls} border-red-500/50 flex flex-col items-center text-center`}>
+              <h3 className="text-xl font-semibold text-red-500 mb-2">Danger Zone</h3>
+              <p className="text-gray-400 mb-4">Permanently delete your account, inventory, and all messages. This cannot be undone.</p>
+              <button onClick={() => setShowDeleteConfirm(true)} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded shadow-sm w-full max-w-xs">Delete Account</button>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* NEW: Delete Account Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl border border-red-500 p-8 max-w-md w-full text-center">
+            <h2 className="text-2xl font-bold text-red-500 mb-4">Delete Account?</h2>
+            <p className="text-gray-300 mb-8">Are you absolutely sure? This action cannot be undone. All your data, inventory, and messages will be permanently deleted.</p>
+            <div className="flex gap-4">
+              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded">Cancel</button>
+              <button onClick={deleteAccount} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded">Yes, Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: View User Profile Modal */}
       {viewUser && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setViewUser(null)}>
           <div className="bg-gray-800 rounded-xl border border-green-500 p-8 max-w-md w-full relative" onClick={e => e.stopPropagation()}>
@@ -445,6 +509,13 @@ export default function Home() {
             </div>
             <button onClick={() => { setChatUser(viewUser.name); setViewUser(null); setTab('chat'); }} className="w-full mt-6 bg-green-600 hover:bg-green-700 py-2 rounded font-bold">Message {viewUser.name}</button>
           </div>
+        </div>
+      )}
+
+      {/* NEW: Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-10 right-10 bg-gray-800 border border-green-500 text-white px-6 py-4 rounded-xl shadow-lg z-[100] flex items-center gap-3">
+          {toast}
         </div>
       )}
     </div>

@@ -46,6 +46,15 @@ def login(user: UserLogin):
     db.close()
     return {"user": users[user.username]}
 
+# NEW: Delete Account Endpoint
+@app.delete("/api/delete-user/{username}")
+def delete_user(username: str):
+    db = get_db(); c = db.cursor()
+    c.execute("DELETE FROM users WHERE username=?", (username,))
+    c.execute("DELETE FROM messages WHERE sender=? OR receiver=?", (username, username))
+    db.commit(); db.close()
+    return {"status": "deleted"}
+
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
     contents = await file.read()
